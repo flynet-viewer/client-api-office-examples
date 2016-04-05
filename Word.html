@@ -1,0 +1,139 @@
+﻿<!--
+Copyright (c) 2016 Flynet Ltd.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"),
+to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense,
+and/or sell copies of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+IN THE SOFTWARE.
+-->
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+    <title>Word Merge Demo</title>
+    <script language="javascript" type="text/javascript" src="Scripts/FVTermParent.js"></script>
+    <script src="Scripts/jquery-2.1.4.js"></script>
+    <script src="Scripts/Navigation.js"></script>
+    <script src="Scripts/Utils.js"></script>
+</head>
+
+<body>
+    <div id="main">
+        <p>
+            <button id="connect" onclick="connectFVTerm()">Connect</button><br>
+        </p>
+        <p>
+            <button id="merge" onclick="doMerge()" disabled>Merge</button><br>
+        </p>
+    </div>
+    
+    <iframe id="FVTerm" style="position:absolute;left:0px;top:100px;width:1000px;height:1000px;" frameborder="1" src="about:blank"></iframe>
+    
+    <script type="text/javascript">
+        // Magic numbers for the Word dialogs.
+        var openFileDialog = 1;
+        var saveFileDialog = 2;
+    
+        // Variables.
+        var fvt;
+        var loggedIn = false;
+        
+        // Called each time FVTerm enounters a new screen.
+        function onNewScreen(rows, name) {
+            var disabled = true;
+            
+            if ( !loggedIn )
+            {
+                // Navigate to the next screen in the sequence.
+                // See Navigation.js
+                NavigateToAccountSummary(fvt, name);
+            }
+            
+            if ( name == "AcctSummary" )
+            {
+                loggedIn = true;
+                disabled = false;
+            }
+            
+            $("#merge").prop('disabled', disabled);
+        }
+        
+        function doMerge() {
+            
+            var fieldValues = {};
+            
+            // Get the values from the screen.
+            fieldValues["AccountNumber"] = fvt.GetField(1, 11);
+            fieldValues["AccountHolder"] = GetTrimmedText(5, 8, 30);
+            fieldValues["Address1"] = GetTrimmedText(6, 8, 30);
+            fieldValues["Address2"] = GetTrimmedText(7, 8, 30);
+            fieldValues["Address3"] = GetTrimmedText(8, 8, 30);
+            fieldValues["City"] = GetTrimmedText(9, 8, 20);
+            fieldValues["PostCode"] = GetTrimmedText(10, 29, 13);
+            fieldValues["NextBill"] = GetTrimmedText(14, 21, 8);
+            fieldValues["EstNextBill"] = GetTrimmedText(19, 58, 13);
+            
+            // Open and show Word.
+            var doc = new ActiveXObject("Word.Application");
+            doc.Visible = true;
+            
+            // Create an open file dialog in Word.
+            var dlg = doc.FileDialog(openFileDialog);
+            
+            // Set the initial filename.
+            // Change this to wherever the example is on your machine.
+            dlg.InitialFileName = "C:\\OfficeExample\\Word.docx";
+            
+            // Show the dialog.
+            dlg.Show();
+            
+            // Wait for ok or cancel.
+            dlg.Execute();
+            
+            if ( doc.ActiveDocument == undefined )
+            {
+                // No document selcted.
+                return;
+            }
+            
+            // Get the fields from the document.
+            var fields = doc.ActiveDocument.Fields;
+            
+            // Loop through the fields.
+            for ( i = fields.Count; i > 0; --i )
+            {
+                var field = fields(i);
+                
+                if ( $.trim( field.Code.Words(2).Text ) != "MERGEFIELD" )
+                {
+                    // Ignore anything that's not a merge field.
+                    // E.g. the date in the example template is a field but not a merge field.
+                    continue;
+                }
+                
+                // Get the name from the field.
+                // This should match the name of a field on the screen.
+                var fieldName = $.trim( field.Code.Words(3).Text );
+                
+                if ( fieldValues[fieldName] != undefined )
+                {
+                    // Select the field in the document.
+                    field.Select();
+                    
+                    // Replace the selection with the text from the screen.
+                    doc.Selection.Range.Text = fieldValues[fieldName];
+                }
+            }
+            
+            // Create and show the save dialog.
+            doc.FileDialog(saveFileDialog).Show();
+            
+            // Wait for an ok or cancel.
+            doc.FileDialog(saveFileDialog).Execute();
+        }
+    </script>
+</body>
+</html>

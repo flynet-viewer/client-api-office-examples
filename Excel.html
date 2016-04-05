@@ -1,0 +1,247 @@
+﻿<!--
+Copyright (c) 2016 Flynet Ltd.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"),
+to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense,
+and/or sell copies of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+IN THE SOFTWARE.
+-->
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+    <title>Excel Merge Demo</title>
+    <script language="javascript" type="text/javascript" src="Scripts/FVTermParent.js"></script>
+    <script src="Scripts/jquery-2.1.4.js"></script>
+    <script src="Scripts/Navigation.js"></script>
+    <script src="Scripts/MultiRow.js"></script>
+    <script src="Scripts/Utils.js"></script>
+</head>
+
+<body>
+    <div id="main">
+        <p>
+            <button id="connect" onclick="connectFVTerm()">Connect</button><br>
+        </p>
+        <p>
+            <button id="merge" onclick="doMerge()" disabled>Merge</button><br>
+        </p>
+    </div>
+    
+    <iframe id="FVTerm" style="position:absolute;left:0px;top:100px;width:1000px;height:1000px;" frameborder="1" src="about:blank"></iframe>
+    
+    <script type="text/javascript">
+        // Magic numbers for the Excel open and save dialogs.
+        var openFileDialog = 1;
+        var saveFileDialog = 2;
+    
+        // Variables.
+        var doc;
+        var fvt;
+        var loggedIn = false;
+        var multiRow;
+        var sheetRow = 2;
+        
+        // Called each time FVTerm enounters a new screen.
+        function onNewScreen(rows, name) {
+            var disabled = true;
+            var readData = false;
+            
+            if ( !loggedIn )
+            {
+                // Navigate to the next screen in the sequence.
+                // See Navigation.js
+                NavigateToAccountTransactions(fvt, name);
+            }
+            
+            if ( name == "AcctTrans" )
+            {
+                // We're on the right screen.
+                loggedIn = true;
+                
+                if ( doc != null )
+                {
+                    // This is the 2nd or subsequent screen of data.
+                    readData = true;
+                }
+                else
+                {
+                    // Need to enable the Merge buton.
+                    disabled = false;
+                }
+            }
+            
+            $("#merge").prop('disabled', disabled);
+            
+            if ( readData )
+            {
+                // Read the data off of this screen.
+                ReadScreenOfData();
+            }
+        }
+        
+        function doMerge() {
+            // This is the multi row on the account transactions page.
+            multiRow = new MultiRow( 8, 9, 22, "[PF8]", "[PF7]" );
+            
+            // Note: column widths (where specified) are +2 chars as that seems to work...
+            multiRow.AddColumn( "Date", 4, 6, "dd/mm/yyyy", 10, FormatDateText );
+            multiRow.AddColumn( "Action", 11, 16, null, 18 );
+            // Note: \\ escapes the \ in the column name.
+            multiRow.AddColumn( "Eff\\Due", 28, 6, "dd/mm/yyyy", 10, FormatDateText );
+            // Number format adds the £ sign, thousands separator and ensures 0 is displayed as 0.00.
+            multiRow.AddColumn( "Amount", 37, 8, "£#,##0.00" );
+            multiRow.AddColumn( "Min Due", 49, 7, "£#,##0.00" );
+            multiRow.AddColumn( "Description", 57, 12, null, 14 );
+            multiRow.AddColumn( "LOB", 76, 4 );
+            
+            multiRow.SetMoreIndicator( 23, 73, "MORE...");
+            
+            // Open Excel.
+            doc = new ActiveXObject("Excel.Application");
+            
+            // Make it visible.
+            doc.Visible = true;
+            
+            // Create an open file dialog.
+            var dlg = doc.FileDialog(openFileDialog);
+            
+            // Set the starting dir.
+            // Change this to wherever the example is on your machine.
+            dlg.InitialFileName = "C:\\OfficeExample\\Excel.xlsx";
+            
+            // Show the dialog.
+            dlg.Show();
+            
+            // Execute waits for an ok ro cancel.
+            dlg.Execute();
+            
+            if ( doc.ActiveSheet == undefined )
+            {
+                // No document was opened.
+                return;
+            }
+            
+            var includedColumns = [];
+            
+            // Get the 1st row of the active worksheet, assuming that it has the headers.
+            var headerRow = doc.ActiveSheet.Rows(1);
+            
+            // Loop through the cells in the header row.
+            for ( var i = 1; i <= headerRow.Cells.Count; ++i )
+            {
+                // Get the value from the cell.
+                var value = headerRow.Cells(i).Value;
+                
+                if ( value == null )
+                {
+                    // Assume 1st empty header = no more columns.
+                    break;
+                }
+                
+                // See if there is a column with that name.
+                var column = multiRow.GetColumn(value);
+                
+                if (column)
+                {
+                    // Remember which column in the sheet the values for this screen column belong in.
+                    column.SheetColumn = i;
+                    
+                    if ( column.HasColumnSettings )
+                    {
+                        // Need to set some properties of the sheet column.
+                        if ( column.NumberFormat )
+                        {
+                            // Set the format for the whole column.
+                            doc.ActiveSheet.Columns( i ).NumberFormat = column.NumberFormat;
+                        }
+                        
+                        if ( column.ColumnWidth )
+                        {
+                            // Set the column width (in chars).
+                            doc.ActiveSheet.Columns( i ).ColumnWidth = column.ColumnWidth;
+                        }
+                    }
+                }
+            }
+            
+            // Read the 1st screen od data.
+            ReadScreenOfData();
+        }
+            
+        // Read a screen's worth of data and then page down if there's more or finish if there isn't.
+        function ReadScreenOfData()
+        {
+            // Loop through the data rows in the multi row.
+            for ( var fvRow = multiRow.FirstRow; fvRow <= multiRow.LastRow; fvRow++ )
+            {
+                // Loop through the columns in the multi row.
+                for ( var mrColumn = 0; mrColumn < multiRow.Columns.length; ++mrColumn )
+                {
+                    // Get the column.
+                    var column = multiRow.Columns[mrColumn];
+                        
+                    if ( column.SheetColumn != 0 )
+                    {
+                        // Get the value from the screen and put it into the right cell.
+                        doc.ActiveSheet.Cells(sheetRow, column.SheetColumn) = column.TextForRow(fvRow);
+                    }
+                }
+                    
+                ++sheetRow;
+            }
+                
+            if ( multiRow.HasMoreRows() )
+            {
+                // Page down.
+                // The new screen will trigger onNewScreen() which will call ReadScreenOfData() again.
+                multiRow.PageDown();
+            }
+            else
+            {
+                // No more data to read.
+                Finished();
+            }
+        }
+        
+        // Give the user the chance to save the modified spread sheet.
+        function Finished()
+        {
+            // Create and show the save dialog.
+            doc.FileDialog(saveFileDialog).Show();
+            
+            // Wait for an ok or cancel.
+            doc.FileDialog(saveFileDialog).Execute();
+            
+            // Tidy up the vars.
+            multiRow = null;
+            doc = null;
+            sheetRow = 2;
+        }
+        
+        // Formats the given text (6 figures ddmyy) as a dd/mm/yyyy date.
+        function FormatDateText( text )
+        {
+            if ( text == undefined ||
+                 text == null ||
+                 text.length != 6 ||
+                 text == "999999" )
+            {
+                // Not a date.
+                return "";
+            }
+            
+            // Get the day, month and year.
+            var day = text.substring( 0, 2 );
+            var month = text.substring( 2, 4 );
+            var year = text.substring( 4, 6 );
+            
+            // Add the /s and assume a 2000+ date..
+            return day + "/" + month + "/20" + year;
+        }
+    </script>
+</body>
+</html>

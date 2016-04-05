@@ -1,0 +1,118 @@
+﻿<!--
+Copyright (c) 2016 Flynet Ltd.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"),
+to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense,
+and/or sell copies of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+IN THE SOFTWARE.
+-->
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+    <title>Outlook Merge Demo</title>
+    <script language="javascript" type="text/javascript" src="Scripts/FVTermParent.js"></script>
+    <script src="Scripts/jquery-2.1.4.js"></script>
+    <script src="Scripts/Navigation.js"></script>
+    <script src="Scripts/mustache.js"></script>
+    <script src="Scripts/Utils.js"></script>
+</head>
+
+<body>
+    <div id="main">
+        <p>
+            <button id="connect" onclick="connectFVTerm()">Connect</button>
+        </p>
+        <p>
+            <label>Template:</label><br>
+            <input type="file" id="template" style="width:1000px;" onchange="enableMergeButton();"/>
+        <p>
+            <button id="merge" onclick="doMerge()" disabled>Merge</button>
+        </p>
+    </div>
+    <iframe id="FVTerm" style="position:absolute;left:0px;top:140px;width:1000px;height:1000px;" frameborder="1" src="about:blank"></iframe>
+    <script type="text/javascript">
+        // Variables.
+        var currentScreen;
+        var fvt;
+        var loggedIn = false;
+        
+        // Called each time FVTerm enounters a new screen.
+        function onNewScreen(rows, name) {
+            currentScreen = name;
+            var disabled = true;
+            
+            if ( !loggedIn )
+            {
+                if (name == "AcctSummary")
+                {
+                    // We're on the right screen.
+                    loggedIn = true;
+                    
+                    enableMergeButton();
+                }
+                else
+                {
+                    // Navigate to the next screen.
+                    NavigateToAccountSummary(fvt, name);
+                }
+            }
+        }
+        
+        // Enables the Merge button if we are on the right screen and have a template.
+        function enableMergeButton()
+        {
+            var disabled = true;
+            
+            if ( currentScreen == "AcctSummary" )
+            {
+                var file = $("#template").val();
+                
+                if ( file != undefined && file != null && file != "" )
+                {
+                    disabled = false;
+                }
+            }
+            
+            $("#merge").prop('disabled', disabled);
+        }
+        
+        // Merges the values from the screen into the template.
+        function doMerge() {
+            
+            var fieldValues = {};
+            
+            // Get the values from the screen.
+            fieldValues["AccountNumber"] = fvt.GetField(1, 11);
+            fieldValues["AccountHolder"] = GetTrimmedText(5, 8, 30);
+            fieldValues["NextBill"] = GetTrimmedText(14, 21, 8);
+            fieldValues["EstNextBill"] = GetTrimmedText(19, 58, 13);
+            
+            // Add some values for To and Subject.
+            fieldValues["To"] = "j.smith@somewhere.com";
+            fieldValues["Subject"] = "Your next bill";
+            
+            // Open Outlook.
+            var outlook = new ActiveXObject("Outlook.Application");
+            
+            var file = $("#template").val();
+            
+            // Create a new email form the template.
+            var email = outlook.CreateItemFromTemplate( file );
+            
+            // Render the various parts of the email.
+            email.To = Mustache.render( email.To, fieldValues );
+            // Note: CC will be empty because fieldValues has no value for CC.
+            email.Cc = Mustache.render( email.Cc, fieldValues );
+            email.Subject = Mustache.render( email.Subject, fieldValues );
+            email.Body = Mustache.render( email.Body, fieldValues );
+            
+            // Show the new email.
+            email.Display();
+        }
+    </script>
+</body>
+</html>
