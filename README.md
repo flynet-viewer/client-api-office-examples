@@ -42,7 +42,7 @@ The Scripts directory contains JavaScript used by some/all of the examples:
 3. Add an application to the FVTerm web.config file (in C:\inetpub\wwwroot\FVTerm by default). Take the next available
    application number and reference the insurerecog.xml file as in this example:
 
-    <add key="Application3" value="InsureRecog;insurerecog.xml;" />
+    &lt;add key="Application3" value="InsureRecog;insurerecog.xml;" /&gt;
     
 4. If your application is not called InsureRecog or your host is not called Host1, then open Scripts\Utils.js, edit
    the connectFVTerm() method and update the values passed for application an/or hostName.
